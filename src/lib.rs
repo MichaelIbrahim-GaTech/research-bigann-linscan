@@ -88,13 +88,13 @@ impl LinscanIndex {
     // this defines the out of the >str(index) in python
     fn __str__(&self) -> PyResult<String> {
         //Ok(self.index.to_string())
-        Ok("linscancufe")
+        Ok(self.index.to_string())
     }
 
     // this defines the out of the >repr(index) in python, as well as simply >index
     fn __repr__(&self) -> PyResult<String> {
         //Ok(self.index.to_string())
-        Ok("linscancufe")
+        Ok(self.index.to_string())
     }
 }
 
