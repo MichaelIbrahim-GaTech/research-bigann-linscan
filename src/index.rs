@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 use std::fmt;
 use std::io::{BufReader, BufWriter};
 use serde::{Serialize, Deserialize};
+
 //use rayon::prelude::*;
 //use std::thread;
 
@@ -31,23 +32,25 @@ impl Ord for SearchResult {
 }
 
 /// A structure that represents a single `posting` in the inverted list.
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-pub struct Posting {
-    pub docid: u32,
-    pub value: f32,
-}
+//#[derive(Serialize, Deserialize, Debug, PartialEq)]
+//pub struct Posting {
+//    pub docid: u32,
+//    pub value: f32,
+//}
 
 /// Vanilla LinScan operates on an uncompressed inverted index.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Index {
-    inverted_index: HashMap<u32, Vec<Posting>>,
+    inverted_index_docid: HashMap<u32, Vec<u32>>,
+    inverted_index_value: HashMap<u32, Vec<f32>>,
     num_docs: u32,
 }
 
 impl Index {
     pub fn new() -> Index {
         Index {
-            inverted_index: HashMap::new(),
+            inverted_index_docid: HashMap::new(),
+            inverted_index_value: HashMap::new(),
             num_docs: 0,
         }
     }
@@ -58,32 +61,73 @@ impl Index {
     /// beginning from 1.
     pub fn insert(&mut self, document: &HashMap<u32, f32>) {
         for (&coordinate, &value) in document {
-            self.inverted_index.entry(coordinate).or_default().push(Posting{
-                docid: self.num_docs,
-                value,
-            });
+            self.inverted_index_docid.entry(coordinate).or_default().push(self.num_docs);
+            self.inverted_index_value.entry(coordinate).or_default().push(value);
         }
         self.num_docs += 1;
     }
 
     fn compute_dot_product(&self, coordinate: u32, query_value: f32, scores: &mut [f32]) {
-        match self.inverted_index.get(&coordinate) {
+        match self.inverted_index_docid.get(&coordinate) {
             None => {}
-            Some(postings) => {
-                postings.iter().for_each(|posting|{scores[posting.docid as usize] += query_value * posting.value;});
+            Some(docids) => {
+                match self.inverted_index_value.get(&coordinate){
+                    None => {}
+                    Some(values) => {
+                        for (i, &docid) in docids.iter().enumerate(){
+                            scores[docid as usize] += query_value * values[i];
+                        }
+                    }
+                };
             }
         }
     }
 
     fn compute_dot_product_with_threshold(&self, coordinate: u32, query_value: f32, threshold: f32, scores: &mut [f32]) {
-        match self.inverted_index.get(&coordinate) {
+        match self.inverted_index_docid.get(&coordinate) {
             None => {}
-            Some(postings) => {
-                postings.iter().for_each(|posting|{if scores[posting.docid as usize] >= threshold {scores[posting.docid as usize] += query_value * posting.value;}});
+            Some(docids) => {
+                match self.inverted_index_value.get(&coordinate){
+                    None => {}
+                    Some(values) => {
+                        for (i, &docid) in docids.iter().enumerate(){
+                            if scores[docid as usize] >= threshold {
+                                scores[docid as usize] += query_value * values[i];
+                            }
+                        }
+                    }
+                };
             }
         }
     }
-
+    
+    fn compute_dot_product_with_threshold_used_docs(&self, coordinate: u32, query_value: f32, threshold: f32, used_docs: &[u32], scores: &mut [f32]) {
+        match self.inverted_index_docid.get(&coordinate) {
+            None => {}
+            Some(docids) => {
+                match self.inverted_index_value.get(&coordinate){
+                    None => {}
+                    Some(values) => {
+                        let mut index = 0;
+                        for (i, &docid) in docids.iter().enumerate(){
+                            while used_docs[index] < docid {
+                                index += 1;
+                                if used_docs[index] >= self.num_docs {
+                                    return;
+                                }
+                            } 
+                            if docid == used_docs[index]{
+                                if scores[docid as usize] >= threshold {
+                                    scores[docid as usize] += query_value * values[i];
+                                }
+                            }
+                        }
+                    }
+                };
+            }
+        }
+    }
+    
     /// Returns the `top_k` documents according to the inner product score with the given query.
     ///
     /// This function implements a basic coordinate-at-a-time algorithm to compute the inner product
@@ -99,6 +143,8 @@ impl Index {
         // Create an array with the same size as the number of documents in the index.
         let mut scores = Vec::with_capacity(self.num_docs as usize);
         scores.resize(self.num_docs as usize, 0_f32);
+        let mut used_docs = Vec::with_capacity(self.num_docs as usize);
+        used_docs.resize(self.num_docs as usize, 0_u32);
         let mut threshold = 0_f32;
         match inner_product_budget {
             None => {
@@ -123,8 +169,37 @@ impl Index {
                     let scoring_time = Instant::now();
                     if count > 2
                     {
+                        if count == 8 {
+                            let mut itr = 0;
+                            for (docid, &score) in scores.iter().enumerate() {
+                                if score >= threshold {
+                                    used_docs[itr] = docid as u32;
+                                    itr += 1;
+                                }
+                            }
+                            used_docs[itr] = self.num_docs + 1;
+                        }
+                        
+                        if count == 16 {
+                            let mut itr1 = 0;
+                            let mut itr2 = 0;
+                            while used_docs[itr1] < self.num_docs {
+                                if scores[itr1 as usize] >= threshold {
+                                    used_docs[itr2] = used_docs[itr1];
+                                    itr2 += 1;
+                                }
+                                itr1 += 1;
+                            }
+                            used_docs[itr2 as usize] = self.num_docs + 1;
+                        }
+                        
                         threshold = cumsum * threshold_mult;
-                        self.compute_dot_product_with_threshold(coordinate, query_value, threshold, &mut scores);
+                        if count < 8 {
+                            self.compute_dot_product_with_threshold(coordinate, query_value, threshold, &mut scores);
+                        }
+                        else {
+                            self.compute_dot_product_with_threshold_used_docs(coordinate, query_value, threshold, &used_docs, &mut scores);
+                        }
                     }
                     else
                     {
@@ -144,7 +219,7 @@ impl Index {
         // Find and return the top-k documents using a heap.
         let mut heap: BinaryHeap<Reverse<SearchResult>> = BinaryHeap::new();
 
-        let mut threshold = f32::MIN;
+        //let mut threshold = f32::MIN;
         for (docid, &score) in scores.iter().enumerate() {
             if score > threshold {
                 heap.push(Reverse(SearchResult { docid: docid as u32, score }));
@@ -180,8 +255,8 @@ impl Index {
 impl fmt::Display for Index {
     // This trait requires `fmt` with this exact signature.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let total_elements: usize = self.inverted_index.iter().map(|(_, v)| v.len()).sum();
-        write!(f, "Linscan Index [{} documents, {} unique tokens, avg. nnz: {}]", self.num_docs, self.inverted_index.keys().len(), total_elements as f32 / self.num_docs as f32 )
+        let total_elements: usize = self.inverted_index_docid.iter().map(|(_, v)| v.len()).sum();
+        write!(f, "Linscan Index [{} documents, {} unique tokens, avg. nnz: {}]", self.num_docs, self.inverted_index_docid.keys().len(), total_elements as f32 / self.num_docs as f32 )
     }
 }
 
@@ -208,6 +283,6 @@ mod tests {
         let ind_rec: Index = bincode::deserialize(&bytes).unwrap();
 
         assert_eq!(ind.num_docs, ind_rec.num_docs);
-        assert_eq!(ind.inverted_index, ind_rec.inverted_index);
+        assert_eq!(ind.inverted_index_docid, ind_rec.inverted_index_docid);
     }
 }
