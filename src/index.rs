@@ -180,7 +180,7 @@ impl Index {
                             used_docs[itr] = self.num_docs + 1;
                         }
                         
-                        if count == 16 {
+                        if count > 8 && count % 16 == 0 {
                             let mut itr1 = 0;
                             let mut itr2 = 0;
                             while used_docs[itr1] < self.num_docs {
