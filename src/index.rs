@@ -105,25 +105,40 @@ impl Index {
         match self.inverted_index_docid.get(&coordinate) {
             None => {}
             Some(docids) => {
-                match self.inverted_index_value.get(&coordinate){
-                    None => {}
-                    Some(values) => {
-                        let mut index = 0;
-                        for (i, &docid) in docids.iter().enumerate(){
-                            while used_docs[index] < docid {
-                                index += 1;
-                                if used_docs[index] >= self.num_docs {
-                                    return;
-                                }
-                            } 
-                            if docid == used_docs[index]{
-                                if scores[docid as usize] >= threshold {
-                                    scores[docid as usize] += query_value * values[i];
+                let mut intersection = Vec::with_capacity(docids.len() as usize);
+                intersection.resize(docids.len() as usize, (0_u32,0_u32));
+                let mut itr = 0;
+                let mut index = 0;
+                let mut done = false;
+                for (i, &docid) in docids.iter().enumerate(){
+                    if done{
+                        break;
+                    }
+                    while used_docs[index] < docid {
+                        index += 1;
+                        if used_docs[index] >= self.num_docs {
+                            done = true;
+                            break;
+                        }
+                    } 
+                    if docid == used_docs[index]{
+                        intersection[itr] = (i as u32, docid);
+                        itr += 1;
+                    }
+                }
+                        
+                if itr > 0 { // if there are nay documents that we need to calculate the multiplication
+                    match self.inverted_index_value.get(&coordinate){
+                        None => {}
+                        Some(values) => {
+                            for i in 0..itr {
+                                if scores[intersection[i].1 as usize] >= threshold {
+                                    scores[intersection[i].1 as usize] += query_value * values[intersection[i].0 as usize];
                                 }
                             }
                         }
-                    }
-                };
+                    };
+                }
             }
         }
     }
