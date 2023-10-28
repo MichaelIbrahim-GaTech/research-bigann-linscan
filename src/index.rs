@@ -234,7 +234,7 @@ impl Index {
         // Find and return the top-k documents using a heap.
         let mut heap: BinaryHeap<Reverse<SearchResult>> = BinaryHeap::new();
 
-        //let mut threshold = f32::MIN;
+        let mut threshold = 0_f32;
         for (docid, &score) in scores.iter().enumerate() {
             if score > threshold {
                 heap.push(Reverse(SearchResult { docid: docid as u32, score }));
