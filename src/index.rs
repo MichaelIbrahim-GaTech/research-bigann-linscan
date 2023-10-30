@@ -186,7 +186,7 @@ impl fmt::Display for Index {
         //let total_elements: usize = self.inverted_index.iter().map(|(_, v)| v.len()).sum();
         //let total_elements: usize = self.inverted_index_list.iter().map(|h| h.iter().map(|(_, v)| v.len()).sum::<usize>()).sum(); 
         //write!(f, "Linscan Index [{} documents, {} unique tokens, avg. nnz: {}]", self.num_docs, self.inverted_index_list[0].keys().len(), total_elements as f32 / self.num_docs as f32 )
-        write!(f, "CUFE Linscan Index");
+        write!(f, "CUFE Linscan Index")
     }
 }
 
