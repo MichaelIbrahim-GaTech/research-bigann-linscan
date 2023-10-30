@@ -198,8 +198,8 @@ mod tests {
     fn test_serde() {
         let mut ind = Index::new();
 
-        let v1 = HashMap::from([(1_u32, 4_u32), (5, 0.6)]);
-        let v2 = HashMap::from([(2_u32, 4_u32), (5, 0.9)]);
+        let v1 = HashMap::from([(1_u32, 4_u32), (5, 6)]);
+        let v2 = HashMap::from([(2_u32, 4_u32), (5, 9)]);
 
         ind.insert(&v1);
         ind.insert(&v2);
