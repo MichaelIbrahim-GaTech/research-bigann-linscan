@@ -39,19 +39,19 @@ impl LinscanIndex {
     }
 
     // insert a new document into the index.
-    pub fn insert(&mut self, newdoc: HashMap<u32, f32>) {
+    pub fn insert(&mut self, newdoc: HashMap<u32, u32>) {
         self.index.insert(&newdoc);
     }
 
     // search for the top_k, given a single query.
-    pub fn retrieve(&mut self, query: HashMap<u32, f32>, top_k: usize, threshold_mult: f32, inner_product_budget_ms: Option<f32>) -> Vec<u32> {
+    pub fn retrieve(&mut self, query: HashMap<u32, u32>, top_k: usize, threshold_mult: u32, inner_product_budget_ms: Option<f32>) -> Vec<u32> {
 
         let r = self.index.retrieve(&query, top_k, threshold_mult, ms_to_duration(inner_product_budget_ms));
         r.into_iter().map(|f| f.docid).collect()
     }
 
     // search for the top_k, given a collection of queries. Queries are issued in parallel using rayon's par_iter.
-    pub fn retrieve_parallel(&mut self, queries: Vec<HashMap<u32, f32>>, top_k: usize, threshold_mult: f32, inner_product_budget_ms: Option<f32>) -> Vec<Vec<u32>> {
+    pub fn retrieve_parallel(&mut self, queries: Vec<HashMap<u32, u32>>, top_k: usize, threshold_mult: u32, inner_product_budget_ms: Option<f32>) -> Vec<Vec<u32>> {
 
         queries.par_iter().map(|q|
             self.index.retrieve(&q, top_k, threshold_mult, ms_to_duration(inner_product_budget_ms))
@@ -87,13 +87,11 @@ impl LinscanIndex {
 
     // this defines the out of the >str(index) in python
     fn __str__(&self) -> PyResult<String> {
-        //Ok(self.index.to_string())
         Ok(self.index.to_string())
     }
 
     // this defines the out of the >repr(index) in python, as well as simply >index
     fn __repr__(&self) -> PyResult<String> {
-        //Ok(self.index.to_string())
         Ok(self.index.to_string())
     }
 }
