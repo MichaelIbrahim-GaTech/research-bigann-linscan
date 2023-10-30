@@ -85,7 +85,7 @@ impl Index {
                     //        scores[(base + posting.docid as u32) as usize] += query_value * (posting.value as u32);
                     //    //}
                     //}
-                    postings.iter().for_each(|posting| scores[(base + posting.docid as u32) as usize] += query_value * (posting.value as u32));
+                    postings.iter().for_each(|posting| scores[(base | posting.docid as u32) as usize] += query_value * (posting.value as u32));
                 }
             }
         }
